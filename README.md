@@ -1,53 +1,40 @@
-# Capture All DBs Performance
+# Database Operations, Backup & Disaster Recovery Automation
 
 ## Overview
 
-This project provides a SQL Server Agent job that automates the collection of database performance metrics across user databases. The job captures performance snapshots and stores them in a dedicated monitoring database (`DBA_Perf`) for analysis, troubleshooting, and capacity planning.
+This repository contains a collection of SQL Server administration solutions designed to support enterprise database operations, including:
 
-## Purpose
+* Automated database performance monitoring
+* Scheduled database backups
+* Database restoration procedures
+* Disaster recovery preparation
+* Database maintenance and storage management
 
-The objective of this solution is to:
+The solution was developed to ensure high availability, operational resilience, and rapid recovery of critical reconciliation databases.
 
-* Continuously monitor database performance
-* Identify performance bottlenecks and trends
-* Support proactive database administration
-* Provide historical performance data for troubleshooting
-* Enable data-driven capacity planning and optimization
+---
 
-## Features
+## Key Components
 
-* Automated SQL Server Agent Job
-* Runs every 15 minutes
-* Captures performance metrics from all user databases
-* Configurable lookback period
-* Automatic retry mechanism on failure
-* Centralized storage in the `DBA_Perf` database
+### 1. Database Performance Monitoring
 
-## Job Configuration
+A SQL Server Agent Job named:
 
-### Job Name
+```text
+Capture All DBs Performance
+```
 
-`Capture All DBs Performance`
+collects performance metrics from user databases every 15 minutes and stores the results in a centralized monitoring repository (`DBA_Perf`).
 
-### Schedule
+#### Features
 
-| Setting    | Value            |
-| ---------- | ---------------- |
-| Frequency  | Daily            |
-| Interval   | Every 15 Minutes |
-| Start Time | 00:00            |
-| End Time   | 23:59            |
+* Automated performance snapshots
+* Historical performance analysis
+* Capacity planning support
+* Slow query investigation
+* Trend analysis
 
-### Retry Policy
-
-| Setting        | Value     |
-| -------------- | --------- |
-| Retry Attempts | 3         |
-| Retry Interval | 5 Minutes |
-
-## Execution Logic
-
-The SQL Agent job executes the following stored procedure:
+#### Execution
 
 ```sql
 EXEC DBA_Perf.dbo.Capture_AllDBs
@@ -56,60 +43,216 @@ EXEC DBA_Perf.dbo.Capture_AllDBs
     @AutoEnableQueryStore = 0;
 ```
 
-### Parameters
+#### Schedule
 
-| Parameter             | Description                                        |
-| --------------------- | -------------------------------------------------- |
-| @LookbackHours        | Number of hours of historical data to analyze      |
-| @IncludeSystemDBs     | Excludes SQL Server system databases when set to 0 |
-| @AutoEnableQueryStore | Prevents automatic Query Store activation          |
+| Setting        | Value            |
+| -------------- | ---------------- |
+| Frequency      | Daily            |
+| Interval       | Every 15 Minutes |
+| Retry Attempts | 3                |
+| Retry Interval | 5 Minutes        |
 
-## Architecture
+---
 
+### 2. Automated Database Backup Solution
+
+A SQL Server Agent Job named:
+
+```text
+10_Admin_Backup
+```
+
+performs scheduled backups of critical reconciliation databases.
+
+#### Databases Protected
+
+* B_RECON_MAIN
+* B_RECON_PROCESS
+* B_RECON_PROCESS_EXT
+* B_RECON_PROCESS_EXT2
+* B_RECON_SETTLE
+* B_RECON_STAGING
+
+#### Backup Features
+
+* Full database backups
+* Backup compression
+* Rotating backup files by weekday
+* Automated database maintenance
+* Log file size reduction
+* Storage optimization
+
+#### Maintenance Process
+
+Before backup execution:
+
+1. Recovery model temporarily changed to SIMPLE
+2. Database files shrunk
+3. Transaction log files shrunk
+4. Recovery model restored to FULL
+5. Backup generated
+
+Example:
+
+```sql
+ALTER DATABASE B_RECON_MAIN
+SET RECOVERY SIMPLE;
+
+DBCC SHRINKFILE (B_RECON_MAIN, 1000);
+DBCC SHRINKFILE (B_RECON_MAIN_Log, 1);
+
+ALTER DATABASE B_RECON_MAIN
+SET RECOVERY FULL;
+```
+
+#### Backup Schedule
+
+| Setting     | Value   |
+| ----------- | ------- |
+| Frequency   | Daily   |
+| Start Time  | 23:30   |
+| Backup Type | Full    |
+| Compression | Enabled |
+
+#### Backup Storage
+
+```text
+D:\BackupRecon\
+```
+
+Example file:
+
+```text
+B_RECON_MAIN_7_Full.bak
+```
+
+---
+
+### 3. Disaster Recovery & Database Restoration
+
+The repository includes tested restoration procedures for recovering critical databases from backup files.
+
+#### Supported Database Restores
+
+* B_RECON_MAIN
+* B_RECON_PROCESS
+* B_RECON_PROCESS_EXT
+* B_RECON_SETTLE
+* B_RECON_STAGING
+
+#### Restore Process
+
+The recovery procedure:
+
+1. Places the database offline
+2. Forces rollback of active transactions
+3. Restores the database from backup
+4. Relocates MDF and LDF files
+5. Replaces existing database files
+
+Example:
+
+```sql
+ALTER DATABASE [B_RECON_MAIN]
+SET OFFLINE WITH ROLLBACK IMMEDIATE;
+
+ALTER DATABASE [B_RECON_MAIN]
+SET ONLINE;
+
+RESTORE DATABASE [B_RECON_MAIN]
+FROM DISK = 'C:\Backup\B_RECON_MAIN_7_Full.bak'
+WITH
+    MOVE 'B_RECON_MAIN'
+        TO 'C:\Data\B_RECON_MAIN_Data.mdf',
+    MOVE 'B_RECON_MAIN_Log'
+        TO 'C:\Data\B_RECON_MAIN_Log.ldf',
+    REPLACE;
+```
+
+#### Recovery Objectives
+
+| Objective             | Purpose                               |
+| --------------------- | ------------------------------------- |
+| Database Availability | Minimize downtime                     |
+| Data Protection       | Preserve critical reconciliation data |
+| Disaster Recovery     | Rapid restoration after failure       |
+| Business Continuity   | Maintain operational readiness        |
+
+---
+
+## Solution Architecture
+
+```text
 SQL Server Agent
-↓
-Capture Job
-↓
-Capture_AllDBs Stored Procedure
-↓
-DBA_Perf Database
-↓
-Performance Analysis & Reporting
+        │
+        ├── Performance Monitoring Job
+        │         │
+        │         ▼
+        │     DBA_Perf Database
+        │
+        ├── Backup Automation Job
+        │         │
+        │         ▼
+        │    Backup Repository
+        │
+        └── Restore Procedures
+                  │
+                  ▼
+           Disaster Recovery
+```
 
-## Prerequisites
+---
 
-* SQL Server Agent enabled
-* DBA_Perf database created
-* Capture_AllDBs stored procedure deployed
-* Appropriate SQL Server permissions
+## Repository Structure
 
-## Deployment
+```text
+Database-Operations-DR/
+│
+├── performance-monitoring/
+│   ├── Capture_All_DBs_Performance.sql
+│
+├── backup-automation/
+│   ├── 10_Admin_Backup.sql
+│
+├── disaster-recovery/
+│   ├── Restore_B_RECON_MAIN.sql
+│   ├── Restore_B_RECON_PROCESS.sql
+│   ├── Restore_B_RECON_PROCESS_EXT.sql
+│   ├── Restore_B_RECON_SETTLE.sql
+│   └── Restore_B_RECON_STAGING.sql
+│
+└── documentation/
+    └── README.md
+```
 
-1. Create the `DBA_Perf` database.
-2. Deploy the `Capture_AllDBs` stored procedure.
-3. Execute the job creation script.
-4. Verify successful job creation in SQL Server Agent.
-5. Monitor initial executions and validate captured data.
-
-## Use Cases
-
-* Database performance monitoring
-* Capacity planning
-* Slow query investigation
-* Trend analysis
-* Production health monitoring
-* Enterprise DBA operations
+---
 
 ## Technologies
 
 * Microsoft SQL Server
-* T-SQL
 * SQL Server Agent
-* Query Performance Monitoring
+* T-SQL
+* Backup Compression
+* Database Recovery
+* Performance Monitoring
+
+---
+
+## Skills Demonstrated
+
+* SQL Server Administration
+* Backup & Recovery Management
+* Disaster Recovery Planning
+* Performance Monitoring
+* Database Maintenance
+* Capacity Planning
+* Business Continuity Support
+* Enterprise Database Operations
+
+---
 
 ## Author
 
 Honore Safari
 
 Senior Database Administrator | Enterprise Systems Engineer | Full-Stack Developer
-
